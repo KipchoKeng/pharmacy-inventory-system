@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard ยาเสพติดและวัตถุออกฤทธิ์ประเภท 2</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',Tahoma,sans-serif;background:#f5f6fa;color:#1a1a2e;font-size:15px}
+.header{background:linear-gradient(135deg,#1a237e 0%,#1565c0 100%);color:#fff;padding:20px 32px;display:flex;align-items:center;gap:16px}
+.header h1{font-size:20px;font-weight:600}
+.header p{font-size:13px;opacity:0.8;margin-top:4px}
+.badge{background:rgba(255,255,255,0.2);padding:4px 12px;border-radius:20px;font-size:12px;white-space:nowrap}
+.main{padding:24px 32px;max-width:1200px;margin:0 auto}
+.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+.controls label{font-size:13px;color:#555;font-weight:500}
+select{padding:7px 12px;border:1px solid #ddd;border-radius:8px;background:#fff;font-size:13px;color:#333;cursor:pointer}
+.drug-tabs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+.drug-btn{padding:7px 14px;border:1px solid #ddd;border-radius:20px;background:#fff;color:#555;font-size:13px;cursor:pointer;transition:all .2s;white-space:nowrap}
+.drug-btn:hover{border-color:#1565c0;color:#1565c0}
+.drug-btn.active{background:#1565c0;color:#fff;border-color:#1565c0;font-weight:500}
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.metric{background:#fff;border-radius:12px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.metric-label{font-size:12px;color:#888;margin-bottom:6px}
+.metric-value{font-size:22px;font-weight:600;color:#1a237e}
+.metric-unit{font-size:12px;color:#aaa;margin-top:2px}
+.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.08);margin-bottom:20px}
+.card-title{font-size:15px;font-weight:600;color:#1a237e;margin-bottom:4px}
+.card-sub{font-size:12px;color:#888;margin-bottom:14px}
+.legend{display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:#555;margin-bottom:10px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend .dot{width:14px;height:3px;border-radius:2px}
+.main-chart-wrap{position:relative;height:300px}
+.forecast-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+.fc-card{background:#fff;border-radius:12px;padding:18px;box-shadow:0 1px 4px rgba(0,0,0,0.08)}
+.fc-title{font-size:14px;font-weight:600;margin-bottom:3px}
+.fc-sub{font-size:12px;color:#888;margin-bottom:12px}
+.fc-chart-wrap{position:relative;height:160px;margin-bottom:12px}
+.stat-row{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;font-size:13px}
+.stat-row:last-child{border-bottom:none}
+.stat-key{color:#888}
+.stat-val{font-weight:500;color:#333}
+.insight{border-left:4px solid #1565c0;background:#e8f0fe;border-radius:0 8px 8px 0;padding:12px 16px;font-size:13px;color:#1a237e;line-height:1.6;margin-bottom:20px}
+.footer{text-align:center;color:#aaa;font-size:12px;padding:24px;border-top:1px solid #eee;margin-top:8px}
+@media(max-width:600px){
+  .forecast-grid{grid-template-columns:1fr}
+  .main{padding:16px}
+  .header{padding:16px}
+}
+@media print{
+  body{background:#fff}
+  .main{padding:12px}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>📋 Dashboard สมุดคุมรายการยาเสพติดและวัตถุออกฤทธิ์ประเภท 2</h1>
+    <p>วิเคราะห์ด้วยแบบจำลอง ARIMA และ Exponential Smoothing | ข้อมูลปี 2565–2568</p>
+  </div>
+  <div class="badge">พยากรณ์ 6 เดือน</div>
+</div>
+
+<div class="main">
+  <div class="controls">
+    <label>ช่วงปี:</label>
+    <select id="yearSel" onchange="renderAll()">
+      <option value="all">ทุกปี (2565–2568)</option>
+      <option value="2568" selected>2568 (ล่าสุด)</option>
+      <option value="2567">2567</option>
+      <option value="2566">2566</option>
+      <option value="2565">2565</option>
+    </select>
+  </div>
+
+  <div class="drug-tabs" id="drugBtns"></div>
+
+  <div id="metrics" class="metrics"></div>
+
+  <div class="card">
+    <div class="card-title">ปริมาณจ่ายรายเดือน + แนวโน้มพยากรณ์</div>
+    <div class="card-sub" id="mainChartSub">ข้อมูลจริงและการพยากรณ์ 6 เดือนข้างหน้า</div>
+    <div class="legend">
+      <span><span class="dot" style="background:#1565c0"></span>ข้อมูลจริง</span>
+      <span><span class="dot" style="background:#2e7d32;border-top:2px dashed #2e7d32;background:none;border-bottom:none;width:18px"></span>ARIMA forecast</span>
+      <span><span class="dot" style="background:#none;border-top:2px dashed #c62828;background:none;border-bottom:none;width:18px"></span>Exp. Smoothing forecast</span>
+    </div>
+    <div class="legend" style="margin-bottom:6px">
+      <span><span style="display:inline-block;width:14px;height:2px;background:#2e7d32;border-top:2px dashed #2e7d32"></span>&nbsp;ARIMA forecast</span>
+      <span><span style="display:inline-block;width:14px;height:2px;border-top:2px dashed #c62828"></span>&nbsp;ES forecast</span>
+    </div>
+    <div class="main-chart-wrap"><canvas id="mainChart" role="img" aria-label="กราฟปริมาณจ่ายยา"></canvas></div>
+  </div>
+
+  <div class="forecast-grid">
+    <div class="fc-card">
+      <div class="fc-title" style="color:#1b5e20">ARIMA (1,1,1)</div>
+      <div class="fc-sub">Auto-Regressive Integrated Moving Average — พยากรณ์ 6 เดือน</div>
+      <div class="fc-chart-wrap"><canvas id="arimaChart" role="img" aria-label="ARIMA forecast bar"></canvas></div>
+      <div id="arimaStats"></div>
+    </div>
+    <div class="fc-card">
+      <div class="fc-title" style="color:#b71c1c">Exponential Smoothing (Holt)</div>
+      <div class="fc-sub">Double Exponential Smoothing with trend — พยากรณ์ 6 เดือน</div>
+      <div class="fc-chart-wrap"><canvas id="esChart" role="img" aria-label="ES forecast bar"></canvas></div>
+      <div id="esStats"></div>
+    </div>
+  </div>
+
+  <div id="insightBox" class="insight"></div>
+
+  <!-- Summary table all drugs -->
+  <div class="card">
+    <div class="card-title">สรุปภาพรวมยาทุกรายการ (ปี 2568)</div>
+    <div class="card-sub">เปรียบเทียบปริมาณจ่ายและผลพยากรณ์</div>
+    <div style="overflow-x:auto">
+    <table id="summaryTable" style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#e8f0fe">
+          <th style="text-align:left;padding:8px 10px;border-bottom:2px solid #c5cae9">รายการยา</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:2px solid #c5cae9">รวมจ่าย 2568</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:2px solid #c5cae9">เฉลี่ย/เดือน</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:2px solid #c5cae9">ARIMA พยากรณ์เฉลี่ย</th>
+          <th style="text-align:right;padding:8px 10px;border-bottom:2px solid #c5cae9">ES พยากรณ์เฉลี่ย</th>
+          <th style="text-align:center;padding:8px 10px;border-bottom:2px solid #c5cae9">แนวโน้ม</th>
+        </tr>
+      </thead>
+      <tbody id="summaryBody"></tbody>
+    </table>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  สมุดคุมรายการยาเสพติดและวัตถุออกฤทธิ์ประเภท 2 | จัดทำด้วย ARIMA &amp; Exponential Smoothing Analysis<br>
+  พิมพ์วันที่: <span id="printDate"></span>
+</div>
+
+<script>
+document.getElementById('printDate').textContent = new Date().toLocaleDateString('th-TH',{year:'numeric',month:'long',day:'numeric'});
+
+const DRUGS = {
+  'Morphine inj.':{unit:'amp',color:'#1565c0',
+    data:{2565:[6,6,11,45,27,170,125,295,609,79,97,69],2566:[63,197,280,55,174,132,43,41,67,113,41,52],2567:[121,505,290,131,338,331,474,540,778,397,424,413],2568:[482,606,76,49,75,57,46,35,85,68,682,226]}},
+  'Morphine 10mg cap':{unit:'cap',color:'#2e7d32',
+    data:{2565:[0,0,0,20,20,90,0,138,376,172,240,30],2566:[0,20,100,280,70,105,124,20,60,140,80,100],2567:[0,0,0,0,0,30,60,0,0,69,80,60],2568:[70,215,163,413,210,430,526,79,585,145,131,0]}},
+  'Morphine 20mg cap':{unit:'cap',color:'#f57f17',
+    data:{2565:[0,0,0,20,20,90,0,138,376,172,240,30],2566:[0,20,100,280,70,105,124,20,60,140,80,100],2567:[92,5,0,0,0,30,93,51,42,9,0,0],2568:[209,71,0,0,162,91,0,28,242,43,44,210]}},
+  'Morphine 30mg cap':{unit:'cap',color:'#6a1b9a',
+    data:{2565:[0,0,0,20,20,90,0,138,376,172,240,30],2566:[0,20,100,280,70,105,124,20,60,140,80,100],2567:[0,0,0,0,0,30,60,0,0,69,80,60],2568:[70,215,163,413,210,420,490,260,502,617,466,525]}},
+  'Morphine 50mg cap':{unit:'cap',color:'#e65100',
+    data:{2565:[0,0,0,0,0,0,0,0,0,60,0,0],2566:[0,0,0,0,0,0,0,0,0,100,0,100],2567:[3,5,0,0,0,0,0,0,0,267,0,0],2568:[10,0,109,65,0,0,0,0,0,0,0,0]}},
+  'Morphine Syrup':{unit:'ขวด',color:'#c62828',
+    data:{2565:[17,14,40,10,28,34,25,50,27,59,28,32],2566:[50,37,41,74,52,30,15,28,16,68,17,44],2567:[31,15,35,18,38,43,15,43,45,9,67,30],2568:[53,30,48,102,50,89,48,54,76,26,37,49]}},
+  'Pethidine inj.':{unit:'amp',color:'#00695c',
+    data:{2565:[16,16,16,9,6,3,4,9,1,0,2,5],2566:[3,1,0,1,7,1,1,2,0,2,1,0],2567:[0,0,0,0,0,2,10,2,4,2,2,2],2568:[1,2,4,2,11,2,3,4,0,3,2,3]}},
+  'Fentanyl inj.':{unit:'amp',color:'#37474f',
+    data:{2565:[0,0,0,0,0,0,0,0,0,0,0,0],2566:[0,0,0,0,0,0,0,0,0,0,0,0],2567:[0,0,0,0,0,0,0,0,0,0,0,0],2568:[0,0,0,0,0,0,0,0,0,0,0,0]}},
+  'Ketamine':{unit:'vial',color:'#4e342e',
+    data:{2565:[0,0,0,0,3,0,0,0,0,0,0,0],2566:[0,0,0,0,0,0,0,0,0,0,0,0],2567:[0,0,0,0,0,0,0,0,0,0,0,0],2568:[0,0,0,0,0,0,0,0,0,0,0,0]}},
+  'Midazolam 5mg/ml':{unit:'amp',color:'#0277bd',
+    data:{2565:[],2566:[],2567:[],2568:[0,0,0,0,0,3,3,22,12,23,28,0]}}
+};
+
+const MONTHS=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+const FC_MONTHS=['เม.ย.69','พ.ค.69','มิ.ย.69','ก.ค.69','ส.ค.69','ก.ย.69'];
+let activeDrug='Morphine inj.';
+let charts={};
+
+function getAllData(drug,year){
+  const d=DRUGS[drug].data;
+  if(year==='all'){
+    let out=[];
+    [2565,2566,2567,2568].forEach(y=>{if(d[y]&&d[y].length)d[y].forEach((v,i)=>out.push({y,m:i,v}));});
+    return out;
+  }
+  return (d[parseInt(year)]||[]).map((v,i)=>({y:parseInt(year),m:i,v}));
+}
+
+function simpleArima(series){
+  const n=series.length;
+  if(n<4)return{forecast:[],mae:0,rmse:0};
+  const diff=[];
+  for(let i=1;i<n;i++)diff.push(series[i]-series[i-1]);
+  const mu=diff.reduce((a,b)=>a+b,0)/diff.length;
+  const errors=[];
+  let lastErr=0;
+  for(let i=1;i<diff.length;i++){
+    const pred=0.4*diff[i-1]+mu*0.6+0.3*lastErr;
+    lastErr=diff[i]-pred;
+    errors.push(lastErr);
+  }
+  const mae=errors.length?errors.map(Math.abs).reduce((a,b)=>a+b,0)/errors.length:0;
+  const rmse=errors.length?Math.sqrt(errors.map(e=>e*e).reduce((a,b)=>a+b,0)/errors.length):0;
+  const forecast=[];
+  let prev=series[n-1];
+  let prevDiff=diff[diff.length-1];
+  for(let i=0;i<6;i++){
+    const nd=0.4*prevDiff+mu*0.6;
+    forecast.push(Math.max(0,Math.round(prev+nd)));
+    prevDiff=nd;prev+=nd;
+  }
+  return{forecast,mae:Math.round(mae*10)/10,rmse:Math.round(rmse*10)/10};
+}
+
+function holtES(series,alpha=0.3,beta=0.2){
+  const n=series.length;
+  if(n<3)return{forecast:[],mae:0,rmse:0,alpha,beta};
+  let l=series[0];
+  let b=(series[Math.min(3,n-1)]-series[0])/Math.min(3,n-1);
+  const errors=[];
+  for(let i=1;i<n;i++){
+    const pred=l+b;
+    errors.push(series[i]-pred);
+    const lNew=alpha*series[i]+(1-alpha)*(l+b);
+    b=beta*(lNew-l)+(1-beta)*b;
+    l=lNew;
+  }
+  const mae=errors.map(Math.abs).reduce((a,b)=>a+b,0)/errors.length;
+  const rmse=Math.sqrt(errors.map(e=>e*e).reduce((a,b)=>a+b,0)/errors.length);
+  const forecast=[];
+  for(let h=1;h<=6;h++)forecast.push(Math.max(0,Math.round(l+h*b)));
+  return{forecast,mae:Math.round(mae*10)/10,rmse:Math.round(rmse*10)/10,alpha,beta};
+}
+
+function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
+
+function renderAll(){
+  const year=document.getElementById('yearSel').value;
+  const raw=getAllData(activeDrug,year);
+  const series=raw.map(d=>d.v);
+  const labels=year==='all'?raw.map(d=>MONTHS[d.m]+"'"+(String(d.y).slice(2))):MONTHS.slice(0,raw.length);
+  const d=DRUGS[activeDrug];
+  const total=series.reduce((a,b)=>a+b,0);
+  const avg=series.length?Math.round(total/series.length):0;
+  const maxV=Math.max(...series,0);
+  const minV=series.filter(v=>v>0).length?Math.min(...series.filter(v=>v>0)):0;
+
+  document.getElementById('metrics').innerHTML=`
+    <div class="metric"><div class="metric-label">รวมจ่ายทั้งหมด</div><div class="metric-value">${total.toLocaleString()}</div><div class="metric-unit">${d.unit}</div></div>
+    <div class="metric"><div class="metric-label">เฉลี่ยต่อเดือน</div><div class="metric-value">${avg.toLocaleString()}</div><div class="metric-unit">${d.unit}/เดือน</div></div>
+    <div class="metric"><div class="metric-label">สูงสุดต่อเดือน</div><div class="metric-value">${maxV.toLocaleString()}</div><div class="metric-unit">${d.unit}</div></div>
+    <div class="metric"><div class="metric-label">ต่ำสุด (ไม่รวม 0)</div><div class="metric-value">${minV.toLocaleString()}</div><div class="metric-unit">${d.unit}</div></div>
+  `;
+
+  const arima=simpleArima(series);
+  const es=holtES(series);
+
+  destroyChart('main');
+  charts['main']=new Chart(document.getElementById('mainChart'),{
+    type:'line',
+    data:{
+      labels:[...labels,...FC_MONTHS],
+      datasets:[
+        {label:'ข้อมูลจริง',data:[...series,...Array(6).fill(null)],borderColor:d.color,backgroundColor:d.color+'18',fill:true,tension:.35,pointRadius:3,borderWidth:2.5},
+        {label:'ARIMA',data:[...Array(series.length).fill(null),series[series.length-1],...arima.forecast],borderColor:'#2e7d32',borderDash:[7,3],pointRadius:4,pointStyle:'triangle',borderWidth:2,tension:.3},
+        {label:'Exp. Smoothing',data:[...Array(series.length).fill(null),series[series.length-1],...es.forecast],borderColor:'#c62828',borderDash:[3,3],pointRadius:4,pointStyle:'rectRot',borderWidth:2,tension:.3}
+      ]
+    },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11},maxRotation:45,autoSkip:true,maxTicksLimit:20}},y:{beginAtZero:true,ticks:{font:{size:11}}}}}
+  });
+
+  destroyChart('arima');
+  charts['arima']=new Chart(document.getElementById('arimaChart'),{
+    type:'bar',
+    data:{labels:FC_MONTHS,datasets:[{data:arima.forecast,backgroundColor:'#2e7d3255',borderColor:'#2e7d32',borderWidth:1.5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11}}},y:{beginAtZero:true,ticks:{font:{size:11}}}}}
+  });
+
+  destroyChart('es');
+  charts['es']=new Chart(document.getElementById('esChart'),{
+    type:'bar',
+    data:{labels:FC_MONTHS,datasets:[{data:es.forecast,backgroundColor:'#c6282855',borderColor:'#c62828',borderWidth:1.5}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:11}}},y:{beginAtZero:true,ticks:{font:{size:11}}}}}
+  });
+
+  const avgA=arima.forecast.length?Math.round(arima.forecast.reduce((a,b)=>a+b,0)/arima.forecast.length):0;
+  const avgE=es.forecast.length?Math.round(es.forecast.reduce((a,b)=>a+b,0)/es.forecast.length):0;
+  document.getElementById('arimaStats').innerHTML=`
+    <div class="stat-row"><span class="stat-key">MAE (ค่าเฉลี่ยความผิดพลาด)</span><span class="stat-val">${arima.mae}</span></div>
+    <div class="stat-row"><span class="stat-key">RMSE</span><span class="stat-val">${arima.rmse}</span></div>
+    <div class="stat-row"><span class="stat-key">พยากรณ์เฉลี่ย/เดือน</span><span class="stat-val">${avgA} ${d.unit}</span></div>
+    <div class="stat-row"><span class="stat-key">ช่วง min–max</span><span class="stat-val">${arima.forecast.length?Math.min(...arima.forecast)+'–'+Math.max(...arima.forecast):'-'}</span></div>
+  `;
+  document.getElementById('esStats').innerHTML=`
+    <div class="stat-row"><span class="stat-key">MAE (ค่าเฉลี่ยความผิดพลาด)</span><span class="stat-val">${es.mae}</span></div>
+    <div class="stat-row"><span class="stat-key">RMSE</span><span class="stat-val">${es.rmse}</span></div>
+    <div class="stat-row"><span class="stat-key">α (Level smoothing)</span><span class="stat-val">${es.alpha}</span></div>
+    <div class="stat-row"><span class="stat-key">β (Trend smoothing)</span><span class="stat-val">${es.beta}</span></div>
+  `;
+
+  const better=arima.mae<=es.mae?'ARIMA':'Exponential Smoothing';
+  const trend=arima.forecast.length>=2?(arima.forecast[5]-arima.forecast[0]>10?'📈 เพิ่มขึ้น':arima.forecast[5]-arima.forecast[0]<-10?'📉 ลดลง':'➡️ ค่อนข้างคงที่'):'ไม่เพียงพอ';
+  document.getElementById('insightBox').innerHTML=
+    `<strong>${activeDrug}</strong> — ใช้เฉลี่ย <strong>${avg} ${d.unit}/เดือน</strong> | แนวโน้มพยากรณ์: <strong>${trend}</strong> | ARIMA เฉลี่ย ${avgA} vs ES เฉลี่ย ${avgE} ${d.unit}/เดือน | <strong>${better}</strong> มีความแม่นยำสูงกว่าในชุดข้อมูลนี้ (MAE ต่ำกว่า)`;
+
+  buildSummaryTable();
+}
+
+function buildSummaryTable(){
+  const tbody=document.getElementById('summaryBody');
+  tbody.innerHTML='';
+  Object.entries(DRUGS).forEach(([name,info])=>{
+    const d2568=info.data[2568]||[];
+    const total=d2568.reduce((a,b)=>a+b,0);
+    const avg=d2568.length?Math.round(total/d2568.length):0;
+    const ar=simpleArima(d2568);
+    const es=holtES(d2568);
+    const avgA=ar.forecast.length?Math.round(ar.forecast.reduce((a,b)=>a+b,0)/ar.forecast.length):0;
+    const avgE=es.forecast.length?Math.round(es.forecast.reduce((a,b)=>a+b,0)/es.forecast.length):0;
+    let trend='—';
+    if(ar.forecast.length>=2){
+      const diff=ar.forecast[5]-ar.forecast[0];
+      trend=diff>10?'📈 เพิ่ม':diff<-10?'📉 ลด':'➡️ คงที่';
+    }
+    const isActive=name===activeDrug;
+    tbody.innerHTML+=`<tr style="background:${isActive?'#e3f2fd':'white'};cursor:pointer" onclick="switchDrug('${name}')">
+      <td style="padding:8px 10px;border-bottom:1px solid #f0f0f0;font-weight:${isActive?'600':'400'}">${name} <span style="color:#aaa;font-size:11px">(${info.unit})</span></td>
+      <td style="text-align:right;padding:8px 10px;border-bottom:1px solid #f0f0f0">${total.toLocaleString()}</td>
+      <td style="text-align:right;padding:8px 10px;border-bottom:1px solid #f0f0f0">${avg.toLocaleString()}</td>
+      <td style="text-align:right;padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#2e7d32;font-weight:500">${avgA.toLocaleString()}</td>
+      <td style="text-align:right;padding:8px 10px;border-bottom:1px solid #f0f0f0;color:#c62828;font-weight:500">${avgE.toLocaleString()}</td>
+      <td style="text-align:center;padding:8px 10px;border-bottom:1px solid #f0f0f0">${trend}</td>
+    </tr>`;
+  });
+}
+
+function switchDrug(name){
+  activeDrug=name;
+  document.querySelectorAll('.drug-btn').forEach(b=>{
+    b.classList.toggle('active',b.dataset.drug===name);
+  });
+  renderAll();
+}
+
+function initButtons(){
+  const wrap=document.getElementById('drugBtns');
+  Object.keys(DRUGS).forEach(name=>{
+    const btn=document.createElement('button');
+    btn.className='drug-btn'+(name===activeDrug?' active':'');
+    btn.dataset.drug=name;
+    btn.textContent=name;
+    btn.onclick=()=>switchDrug(name);
+    wrap.appendChild(btn);
+  });
+}
+
+initButtons();
+renderAll();
+</script>
+</body>
+</html>
+<div class="card">
+  <div class="card-title">Power BI Dashboard</div>
+  <div class="card-sub">Embedded from Microsoft Power BI</div>
+
+  <div style="position:relative;height:800px;">
+    <iframe
+      title="Power BI"
+      width="100%"
+      height="100%"
+      src="https://app.powerbi.com/view?r=eyJrIjoiMDFhMzNjMjMtY2U4Ny00ZTIxLTkzNjAtYjE2YTc3MjM2NDU2IiwidCI6IjlmOGRhZGExLTQxMjMtNDNjZC1iNTZjLTY1YmExNmNhOGYxNiIsImMiOjEwfQ%3D%3D"
+      frameborder="0"
+      allowfullscreen="true">
+    </iframe>
+  </div>
+</div>
